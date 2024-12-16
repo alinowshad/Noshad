@@ -1,0 +1,290 @@
+sig Firstname{}
+sig Lastname{}
+sig Email{}
+sig Password{}
+sig CompanyName{}
+sig UniversityName{}
+sig Resume{}
+sig Time {
+    value: one Int
+}
+
+
+abstract sig Status{}
+one sig ACEEPT extends Status{}
+one sig REJECT extends Status{}
+one sig SHORTLIST extends Status{}
+one sig SUBMITTED extends Status{}
+
+
+abstract sig User {
+    name: one Firstname,
+    lastname: one Lastname,
+    email: one Email
+}
+
+sig Student extends User {
+    university: one UniversityName,
+    password: one Password,
+    resume: one Resume,
+			    meetings: set Meeting,
+	    applications: set Application,
+    complaints: set Complaint
+}
+
+
+sig Company extends User {
+    password: one Password,
+    meetings: set Meeting,
+    internships: set Internship,
+    questionnaires: set Questionnaire
+}
+
+sig University extends User {
+		    nameUniversity: one UniversityName,
+    password: one Password,
+	    students: set Student,
+    monitoredInternships: set Internship,
+    monitoredApplications: set Application,
+    receivedComplaints: set Complaint
+}
+
+
+sig Internship {
+    company: one Company,
+    applicants: set Student,
+    deadline: one Time,
+    acceptedStudent: lone Student
+}
+
+
+sig Application {
+    student: one Student,
+    internship: one Internship,
+    status: one Status,
+    timeSubmitted: one Time
+}
+
+
+sig Complaint {
+    student: one Student,
+    university: one University,
+    application: one Application,
+    timeSubmitted: one Time
+}
+
+
+sig Questionnaire {
+    internship: one Internship,
+    assignedStudents: set Student,
+    submissions: set Student
+}
+
+
+sig Meeting {
+    student: one Student,
+    internship: one Internship,
+    deadline: one Time
+}
+
+
+fact ApplicationDeadline {
+    all a: Application | a.internship.deadline in Time
+}
+
+fact UniqueActiveInternship {
+    all s: Student | lone i: Internship | i.acceptedStudent = s
+}
+
+fact ValidComplaints {
+    all c: Complaint | c.application in c.student.applications
+}
+
+fact QuestionnaireConstraints {
+    all q: Questionnaire | q.assignedStudents in q.internship.applicants
+}
+
+
+fact ValidApplication {
+    all a: Application | 
+        a.internship.deadline.value >= a.timeSubmitted.value
+
+    all a: Application | 
+        one a.student and one a.internship
+}
+
+
+fact UniqueInternshipPerCompany {
+    all i: Internship | lone c: Company | i in c.internships
+}
+
+fact UniqueMeetingTimesPerInternship {
+    all i: Internship, m1, m2: Meeting |
+        m1 != m2 and m1.internship = i and m2.internship = i =>
+            m1.deadline != m2.deadline
+}
+
+fact UniqueMeetingTimesPerStudent {
+    all s: Student, m1, m2: Meeting |
+        m1 != m2 and m1.student = s and m2.student = s =>
+            m1.deadline != m2.deadline
+}
+
+fact ApplicationsBelongToInternship {
+    all a: Application | a in a.internship.applicants.applications
+}
+
+fact ValidComplaintSubmission {
+    all c: Complaint | 
+        c.application.student = c.student and 
+        c.university.nameUniversity = c.student.university
+}
+
+
+fact ApplicationAssociatedToOneStudent {
+    all a: Application | one a.student
+}
+
+
+fact UniversityMonitorsOnlyOwnApplications {
+    all u: University, a: Application |
+        a in u.monitoredApplications => a.student in u.students
+}
+
+
+fact UniversityMonitorsOnlyOwnInternships {
+    all u: University, i: Internship |
+        i in u.monitoredInternships => i.applicants in u.students
+}
+
+
+fact ValidQuestionnaireSubmission {
+    all q: Questionnaire, s: Student |
+        s in q.assignedStudents => s in q.internship.applicants
+}
+
+
+fact UniqueEmailAcrossUsers {
+    all u1, u2: User | 
+        u1 != u2 => u1.email != u2.email
+}
+
+
+fact UniqueApplicationPerInternship {
+    all i1, i2: Internship, a: Application |
+        i1 != i2 => (a in i1.applicants.applications and a in i2.applicants.applications) implies i1 = i2
+}
+
+
+fact NoStudentAcceptedByTwoInternships {
+    all s: Student, i1, i2: Internship |
+        i1 != i2 and i1.acceptedStudent = s and i2.acceptedStudent = s => i1 = i2
+}
+
+
+fact NoStudentFromTwoUniversities {
+    all s: Student, u1, u2: University |
+        u1 != u2 and s.university = u1.nameUniversity and s.university = u2.nameUniversity => u1 = u2
+}
+
+
+fact NoDuplicateResumes {
+    all s1, s2: Student |
+        s1 != s2 => s1.resume != s2.resume
+}
+
+fact applicationAcceptedStatus {
+    all s: Student, i: Internship, a: Application |
+        i.acceptedStudent = s and
+        a.student = s and
+        a.internship = i
+        => a.status = ACEEPT
+}
+
+
+
+fact internshipAcceptanceAndRejection {
+    all i: Internship, s: Student, a: Application |
+        i.acceptedStudent = s and
+        a.student = s and a.internship = i
+        => a.status = ACEEPT
+
+    all i: Internship, s: Student, a: Application |
+        i.acceptedStudent = s and
+        a.student != s and a.internship = i
+        => a.status = REJECT
+}
+
+pred PostInternship(c: Company, i: Internship) {
+    i.company = c
+    i.deadline.value > 0
+    no i.applicants
+    no i.acceptedStudent 
+}
+
+
+pred AcceptInternshipApplication(s: Student, i: Internship, a: Application) {
+    a.status = ACEEPT  
+    i.acceptedStudent = s  
+    
+    all a1: Application | 
+        a1.internship = i and a1 != a and a1.student != s => 
+            a1.status = REJECT
+   
+    no i.applicants - s
+}
+
+pred CheckDuplicateResumes(s1: Student, s2: Student) {
+    s1 != s2 => s1.resume != s2.resume
+}
+
+
+pred ValidateEmailUniqueness(u1: User, u2: User) {
+    u1 != u2 => u1.email != u2.email
+}
+
+
+pred StudentAcceptedByOneInternship(s: Student) {
+    lone i: Internship | i.acceptedStudent = s
+}
+
+
+pred CheckApplicationDeadline(a: Application) {
+    a.internship.deadline.value >= a.timeSubmitted.value
+}
+
+
+pred MonitorInternships(u: University, i: Internship) {
+    i.applicants in u.students
+    i in u.monitoredInternships
+}
+
+
+pred MonitorApplications(u: University, a: Application) {
+    a.student in u.students
+    a in u.monitoredApplications
+}
+
+
+pred SubmitQuestionnaire(q: Questionnaire, s: Student) {
+    s in q.assignedStudents
+    s in q.submissions
+}
+
+
+pred AssignQuestionnaire(q: Questionnaire, i: Internship, students: set Student) {
+    q.internship = i
+    q.assignedStudents = students
+    students in i.applicants
+}
+
+pred world1 {
+    #Student > 2
+    #University> 3
+    #Company > 1
+    #Internship > 2
+    #Application > 3
+    #Meeting > 1
+}
+
+run world1 for 10
